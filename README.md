@@ -10,8 +10,8 @@
 #### YOLO object detection
 #### Opencv
 #### PCL
-#### Kinova ros_kortex package (https://github.com/Kinovarobotics/ros_kortex)
-#### Trajopt_ros (https://github.com/ros-industrial-consortium/trajopt_ros)
+#### [Kinova ros_kortex package] (https://github.com/Kinovarobotics/ros_kortex)
+#### [Trajopt_ros] (https://github.com/ros-industrial-consortium/trajopt_ros)
 
 ## Hardware requirement:
 #### Kinova Gen3 arm
