@@ -1,0 +1,52 @@
+<launch>
+		
+	<include file="$(find kortex_driver)/launch/kortex_driver.launch" />
+	<!--<node name="state_relay" pkg="topic_tools" type="relay" -->
+	<!--		args="/my_gen3/joint_states joint_states"/> -->
+	<include file="$(find realsense2_camera)/launch/rs_rgbd.launch" />
+
+	<node pkg="tf" type="static_transform_publisher" 
+        	name="map_link_to_camera" 
+        	args="0.46 0.6343 0.362 -1.57 0.0 0.0 /base_link /camera_link 100" />
+        <!-- <include file="$(find darknet_ros)/launch/darknet_ros_wire.launch" /> -->
+
+	<node pkg="tf" type="static_transform_publisher" 
+        	name="base_link_to_endeffector_default" 
+        	args="0.0 0.0 0.0 -1.57 3.14 0.0 /base_link /endeffector_default 100" />	
+
+	<node pkg="tf" type="static_transform_publisher" 
+        	name="base_link_to_socket1" 
+        	args="0.64 0.315 0.4 -1.57 3.14 0.0 /base_link /socket1 100" />
+
+	<node pkg="tf" type="static_transform_publisher" 
+        	name="base_link_to_socket2" 
+        	args="0.64 0.0 0.4 -1.57 3.14 0.0 /base_link /socket2 100" />
+
+	<node pkg="tf" type="static_transform_publisher" 
+        	name="base_link_to_target" 
+        	args="0.64 0.0 0.4 -1.57 3.14 0.0 /base_link /Target_Socket 100" />
+
+	<!--<node pkg="tf" type="static_transform_publisher"  -->
+        <!--	name="base_link_to_socket_1"  -->
+        <!--	args="0.64 0.315 0.4 -1.57 3.14 0.0 /base_link /socket_1 100" /> -->
+
+	<!--<node pkg="tf" type="static_transform_publisher" -->
+        <!--	name="base_link_to_socket_2"  -->
+        <!--	args="0.64 0.0 0.4 -1.57 3.14 0.0 /base_link /socket_2 100" /> -->
+	
+	<node pkg="tf" type="static_transform_publisher" 
+        	name="base_link_to_preinsert" 
+        	args="0.52 0.0 0.4 -1.57 3.14 0.0 /base_link /preinsert 100" />	
+
+	<!--<node pkg="tf" type="static_transform_publisher" -->
+        <!--	name="eedefault_link_to_ee"      -->
+        <!--	args="0.0 0.0 0.0 0.0 0.0 0.0 /end_effector_link /end_effector 100" /> -->
+
+
+	<!--<include file="$(find kinect2_bridge)/launch/kinect2_bridge.launch" />-->
+	<!--<node pkg="tf" type="static_transform_publisher" -->
+        	<!--name="map_link_to_kinect_camera" -->
+        	<!--args="0.2286 -0.02 0.33 0.0 3.14 1.57 /j2n6s300_link_base /kinect2_rgb_optical_frame 1" />-->
+
+
+</launch>
