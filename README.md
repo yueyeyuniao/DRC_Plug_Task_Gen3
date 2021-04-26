@@ -23,6 +23,7 @@
 #### /src folder includes all the source codes
 #### /media folder includes the demonstration video in gif
 #### /research folder includes all the configuration and launch files for integrating Trajopt with Gen3 arm 
+#### /trajopt_ros folder includes the trajopt (optimized motion planner) in ROS
 
 ## Copyright: 
 ### This work was developed at the [RIVeR Lab, Northeastern University](http://robot.neu.edu/) 
