@@ -444,7 +444,7 @@ class gen3_traj_replay
       ////////////////////
       /// MAKE PROBLEM ///
       ////////////////////
-      trajopt::TrajOptProbPtr prob = make_problem(env, req.pose, req.dt);
+      trajopt::TrajOptProbPtr prob = make_problem(env, pose, dt);
 
 
       //////////////////////
@@ -498,32 +498,32 @@ class gen3_traj_replay
       // std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
       // Create action client to send trajectories
-      // actionlib::SimpleActionClient<control_msgs::FollowJointTrajectoryAction> execution_client("my_gen3/gen3_joint_trajectory_controller/follow_joint_trajectory",false);
+      actionlib::SimpleActionClient<control_msgs::FollowJointTrajectoryAction> execution_client("my_gen3/gen3_joint_trajectory_controller/follow_joint_trajectory",false);
       trajectory_msgs::JointTrajectory traj_msg;
-      // execution_client.waitForServer(ros::Duration(1.0));
+      execution_client.waitForServer(ros::Duration(1.0));
 
 
       // using jt directly
-       ros::Duration t(0.25);
-       trajArrayToJointTrajectory_moveit(planning_response.joint_names, planning_response.trajectory, robot_model,true, true, t);
+      ros::Duration t(0.25);
+      trajArrayToJointTrajectory_moveit(planning_response.joint_names, planning_response.trajectory, robot_model,true, true, t);
 
-       // Send to hardware
-      //  execution_client.sendGoal(trajectory_action);
-      //  execution_client.waitForResult(ros::Duration(10.0));
+      // Send to hardware
+      execution_client.sendGoal(trajectory_action);
+      execution_client.waitForResult(ros::Duration(10.0));
 
+      bool result;
+      if (execution_client.getState() != actionlib::SimpleClientGoalState::LOST)
+        {
+          std::cout << "succeeded! \n";
+          result = true;
+        }
+        else
+        {
+          std::cout << "failed \n";
+          result = false;
+        }
 
-      //  if (execution_client.getState() != actionlib::SimpleClientGoalState::LOST)
-      //  {
-      //    std::cout << "succeeded! \n";
-      //    res.result = true;
-      //  }
-      //  else
-      //  {
-      //    std::cout << "failed \n";
-      //    res.result = false;
-      //  }
-
-      //  return res.result;
+        return result;
     }
 
     
