@@ -444,7 +444,7 @@ class gen3_traj_replay
       ////////////////////
       /// MAKE PROBLEM ///
       ////////////////////
-      trajopt::TrajOptProbPtr prob = make_problem(env, req.pose, req.dt);
+      trajopt::TrajOptProbPtr prob = make_problem(env, pose, dt);
 
 
       //////////////////////
@@ -504,6 +504,7 @@ class gen3_traj_replay
 
 
       // using jt directly
+<<<<<<< HEAD
        ros::Duration t(0.25);
        trajArrayToJointTrajectory_moveit(planning_response.joint_names, planning_response.trajectory, robot_model,true, true, t);
 
@@ -524,6 +525,28 @@ class gen3_traj_replay
        }
 
        return res.result;
+=======
+      ros::Duration t(0.25);
+      trajArrayToJointTrajectory_moveit(planning_response.joint_names, planning_response.trajectory, robot_model,true, true, t);
+
+      // Send to hardware
+      execution_client.sendGoal(trajectory_action);
+      execution_client.waitForResult(ros::Duration(10.0));
+
+      bool result;
+      if (execution_client.getState() != actionlib::SimpleClientGoalState::LOST)
+        {
+          std::cout << "succeeded! \n";
+          result = true;
+        }
+        else
+        {
+          std::cout << "failed \n";
+          result = false;
+        }
+
+        return result;
+>>>>>>> ba874f1e635f6f47153fc0b0abdfc08e0cda365c
     }
 
     
