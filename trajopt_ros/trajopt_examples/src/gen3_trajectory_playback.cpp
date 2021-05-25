@@ -24,6 +24,8 @@
 #include "trajopt_examples/trajopt_node.h"
 #include <geometry_msgs/Pose.h>
 
+
+
 control_msgs::FollowJointTrajectoryGoal trajectory_action;
 //trajectory_msgs::JointTrajectory traj_msg;
 
@@ -54,178 +56,22 @@ class gen3_traj_replay
 
       //Create robot model for using moveit time parameterization
       robot_model.reset(new moveit::core::RobotModel(urdf_model, srdf_model));
-      srv = nh.advertiseService("trajopt_motion_planning", &Trajopt_gen3_server::trajopt_gen3_srv, this);
       ROS_INFO("Robot model loaded"); 
+      // sub = nh.subscribe("...", 1000, traj_callback);
     }
 
-    void addCollision(tesseract::tesseract_ros::KDLEnvPtr env, std::string name, Eigen::Vector3d size, Eigen::Vector3d pose)
+    // void traj_callback(const trajectory_msgs::JointTrajectory& msg)
+    // {
+    //   ROS_INFO("Got the trajectory");
+    // }
+
+    void getTrajectoryOnce()
     {
-      tesseract::AttachableObjectPtr obj(new tesseract::AttachableObject());
-      std::shared_ptr<shapes::Box> box(new shapes::Box());
-      Eigen::Isometry3d box_pose = Eigen::Isometry3d::Identity();
-      box_pose.translation() += pose;
-
-      box->size[0] = size[0];
-      box->size[1] = size[1];
-      box->size[2] = size[2];
-
-      obj->name = name;
-      obj->visual.shapes.push_back(box);
-      obj->visual.shape_poses.push_back(box_pose);
-      obj->collision.shapes.push_back(box);
-      obj->collision.shape_poses.push_back(box_pose);
-      obj->collision.collision_object_types.push_back(tesseract::CollisionObjectType::UseShapeType);
-
-      env->addAttachableObject(obj);
-
-      // move box to the correct location
-      tesseract::AttachedBodyInfo attached_body;
-      Eigen::Isometry3d body_pose = Eigen::Isometry3d::Identity();
-      attached_body.object_name = name;
-      attached_body.parent_link_name = "link_0";
-      attached_body.transform = body_pose;
-
-      env->attachBody(attached_body);
-    }
-
-    trajopt::TrajOptProbPtr make_problem(tesseract::tesseract_ros::KDLEnvPtr env, geometry_msgs::Pose pose, double dt)
-    {
-      // Define the final pose
-      Eigen::Isometry3d final_pose;
-      Eigen::Quaterniond orientation(pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z); // w x y z
-      final_pose.linear() = orientation.matrix();
-      final_pose.translation() += Eigen::Vector3d(pose.position.x, pose.position.y, pose.position.z);  // Offset for the table
-
-      /* retract
-      orientation(0.029, 0.706, 0.707, 0.029)
-      Eigen::Vector3d(0.125, 0.002, 0.331)
-      */
-      /* home
-      orientation(0.499, 0.500, 0.500, 0.501);
-      Eigen::Vector3d(0.456, 0.02, 0.434);
-      */
-
-      // Create the problem construction info
-      trajopt::ProblemConstructionInfo pci(env);
-
-      pci.kin = env->getManipulator(manip);
-
-      pci.basic_info.n_steps = steps_per_phase * 2;
-      pci.basic_info.manip = manip;
-      pci.basic_info.dt_lower_lim = dt;    // 1/most time
-      pci.basic_info.dt_upper_lim = dt;  // 1/least time
-      pci.basic_info.start_fixed = true;
-      pci.basic_info.use_time = true;
-
-      pci.init_info.type = trajopt::InitInfo::STATIONARY;
-      pci.init_info.dt = dt;
-
-      // Add a collision cost
-      if (true)
-      {
-        std::shared_ptr<trajopt::CollisionTermInfo> collision(new trajopt::CollisionTermInfo);
-        collision->name = "collision";
-        collision->term_type = trajopt::TT_COST;
-        collision->continuous = true;
-        collision->first_step = 0;
-        collision->last_step = pci.basic_info.n_steps - 1;
-        collision->gap = 1;
-        collision->info = trajopt::createSafetyMarginDataVector(pci.basic_info.n_steps, 0.025, 40);
-        pci.cost_infos.push_back(collision);
+      boost::shared_ptr<trajectory_msgs::JointTrajectory const> traj;
+      traj = ros::topic::waitForMessage<trajectory_msgs::JointTrajectory>("/planned_trajectory",nh);
+      if(traj != NULL){
+        traj_msg_queue = *traj;
       }
-
-      // Add a velocity cost without time to penalize paths that are longer
-      if (true)
-      {
-        std::shared_ptr<trajopt::JointVelTermInfo> jv(new trajopt::JointVelTermInfo);
-        jv->targets = std::vector<double>(7, 0.0);
-        jv->coeffs = std::vector<double>(7, 5.0);
-        jv->term_type = trajopt::TT_COST;
-        jv->first_step = 0;
-        jv->last_step = pci.basic_info.n_steps - 1;
-        jv->name = "joint_velocity_cost";
-        pci.cost_infos.push_back(jv);
-      }
-
-      // Add a velocity cnt with time to insure that robot dynamics are obeyed
-      if (true)
-      {
-        std::shared_ptr<trajopt::JointVelTermInfo> jv(new trajopt::JointVelTermInfo);
-
-        // Taken from iiwa documentation (radians/s) and scaled by 0.8
-        std::vector<double> vel_lower_lim{ -0.86, -0.86, -0.86, -0.86,
-                                           -0.86, -0.86, -0.86 };
-        std::vector<double> vel_upper_lim{ 0.86, 0.86, 0.86, 0.86,
-                                           0.86, 0.86, 0.86 };
-
-        jv->targets = std::vector<double>(7, 0.0);
-        jv->coeffs = std::vector<double>(7, 5.0);
-        jv->lower_tols = vel_lower_lim;
-        jv->upper_tols = vel_upper_lim;
-        jv->term_type = (trajopt::TT_CNT | trajopt::TT_USE_TIME);
-        jv->first_step = 0;
-        jv->last_step = pci.basic_info.n_steps - 1;
-        jv->name = "joint_velocity_cnt";
-        pci.cnt_infos.push_back(jv);
-      }
-
-      // Add an acceleration cnt
-      if (true)
-      {
-        std::shared_ptr<trajopt::JointAccTermInfo> ja(new trajopt::JointAccTermInfo);
-
-        // Taken from iiwa documentation (radians/s) and scaled by 0.8
-        std::vector<double> acc_lower_lim{ -0.3, -0.3, -0.3, -0.3,
-                                           -0.3, -0.3, -0.3 };
-        std::vector<double> acc_upper_lim{ 0.3, 0.3, 0.3, 0.3,
-                                           0.3, 0.3, 0.3 };
-
-        ja->targets = std::vector<double>(7, 0.0);
-        ja->coeffs = std::vector<double>(7, 50.0);
-        ja->lower_tols = acc_lower_lim;
-        ja->upper_tols = acc_upper_lim;
-        ja->term_type = (trajopt::TT_CNT);
-        ja->first_step = 0;
-        ja->last_step = pci.basic_info.n_steps - 1;
-        ja->name = "joint_accelaration_cnt";
-        pci.cnt_infos.push_back(ja);
-      }
-
-
-      // Add cartesian pose cnt at the final point
-      if (true)
-      {
-        Eigen::Quaterniond rotation(final_pose.linear());
-        std::shared_ptr<trajopt::CartPoseTermInfo> pose_constraint =
-            std::shared_ptr<trajopt::CartPoseTermInfo>(new trajopt::CartPoseTermInfo);
-        pose_constraint->term_type = trajopt::TT_CNT;
-        pose_constraint->link = end_effector;
-        pose_constraint->timestep = steps_per_phase;
-        pose_constraint->xyz = final_pose.translation();
-
-        pose_constraint->wxyz = Eigen::Vector4d(rotation.w(), rotation.x(), rotation.y(), rotation.z());
-        pose_constraint->pos_coeffs = Eigen::Vector3d(10.0, 10.0, 10.0);
-        pose_constraint->rot_coeffs = Eigen::Vector3d(10.0, 10.0, 10.0);
-        pose_constraint->name = "pose_" + std::to_string(steps_per_phase);
-        pci.cnt_infos.push_back(pose_constraint);
-      }
-
-
-      // Add a cost on the total time to complete the motion
-      if (true)
-      {
-        std::shared_ptr<trajopt::TotalTimeTermInfo> time_cost(new trajopt::TotalTimeTermInfo);
-        time_cost->name = "time_cost";
-        time_cost->coeff = 5.0;
-        time_cost->limit = 0.0;
-        time_cost->term_type = trajopt::TT_COST;
-        pci.cost_infos.push_back(time_cost);
-      }
-
-      // Create the problem
-      trajopt::TrajOptProbPtr prob = ConstructProblem(pci);
-      return prob;
-
     }
 
     control_msgs::FollowJointTrajectoryGoal trajArrayToJointTrajectory_moveit(std::vector<std::string> joint_names,
@@ -268,7 +114,7 @@ class gen3_traj_replay
         {
           if (ind == traj_array.rows()-1) continue;
           auto mat_next = pos_mat.row(ind+1);
-          auto dist = (time_mat(ind+1, time_mat.cols()-1) / 0.001); // decrease the last number to get valid trajectory
+          auto dist = (time_increment.toSec() / 0.001); // decrease the last number to get valid trajectory
           Eigen::MatrixXd dmat = (mat_next - mat) / dist;
 
           // if (dmat(0,0) < pow(10, -8) && dmat(0,1) < pow(10, -8) && dmat(0,2) < pow(10, -8) && dmat(0,3) < pow(10, -8) && dmat(0,4) < pow(10, -8) && dmat(0,5) < pow(10, -8) && dmat(0,6) < pow(10, -8))
@@ -287,8 +133,8 @@ class gen3_traj_replay
             }
             else
             {
-              //BUG to fix
-              time_from_start += time_increment;
+              // fit the constraint
+              time_from_start += ros::Duration(0.001);
             }
             traj_point.time_from_start = time_from_start;
 
@@ -390,7 +236,7 @@ class gen3_traj_replay
       return trajectory_action;
     }
 
-    void gen3_play(geometry_msgs::Pose pose, double dt)
+    bool gen3_play()
     {
       //Initialize the environment
       tesseract::tesseract_ros::KDLEnvPtr env(new tesseract::tesseract_ros::KDLEnv);
@@ -429,66 +275,6 @@ class gen3_traj_replay
         ROS_INFO("Joint Names:%s", i.c_str());
       }
 
-      // add collision boxes
-      // tubes for nist task
-      addCollision(env, "tube1", Eigen::Vector3d(0.03,0.03,0.04), Eigen::Vector3d(0.42,0.105,0.085));
-      addCollision(env, "tube2", Eigen::Vector3d(0.04,0.03,0.03), Eigen::Vector3d(0.36,0.105,0.03));
-      addCollision(env, "tube3", Eigen::Vector3d(0.03,0.04,0.03), Eigen::Vector3d(0.315,0.165,0.03));
-
-
-      // Send the initial trajectory for plotting
-      tesseract::tesseract_ros::ROSBasicPlotting plotter(env);
-      Eigen::RowVectorXd init_pos = env->getCurrentJointValues();
-      plotter.plotTrajectory(env->getJointNames(), init_pos.leftCols(env->getJointNames().size()));
-
-      ////////////////////
-      /// MAKE PROBLEM ///
-      ////////////////////
-      trajopt::TrajOptProbPtr prob = make_problem(env, pose, dt);
-
-
-      //////////////////////
-      // SOLVE PROBLEM /////
-      //////////////////////
-      // ROS_ERROR("Press enter to continue");
-      // std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
-      // Create the planner and the responses that will store the results
-      tesseract::tesseract_planning::TrajOptPlanner planner;
-      tesseract::tesseract_planning::PlannerResponse planning_response;
-      tesseract::tesseract_planning::PlannerResponse planning_response_place;
-      // Set the optimization parameters (Most are being left as defaults)
-      tesseract::tesseract_planning::TrajOptPlannerConfig config(prob);
-      config.params.max_iter = 500;
-
-      // Create Plot Callback
-      if (plotting_cb)
-      {
-        tesseract::tesseract_ros::ROSBasicPlottingPtr plotter_ptr(new tesseract::tesseract_ros::ROSBasicPlotting(env));
-        config.callbacks.push_back(PlotCallback(*prob, plotter_ptr));
-      }
-
-      // Create file write callback discarding any of the file's current contents
-      std::shared_ptr<std::ofstream> stream_ptr(new std::ofstream);
-      if (file_write_cb)
-      {
-        std::string index = std::to_string(req.index);
-        std::cout << index << std::endl;
-        std::string path = ros::package::getPath("trajopt_examples") + "/demo_traj_"+index+".csv";
-        stream_ptr->open(path, std::ofstream::out | std::ofstream::trunc);
-        config.callbacks.push_back(trajopt::WriteCallback(stream_ptr, prob));
-      }
-
-      // Solve problem. Results are stored in the response
-      planner.solve(planning_response, config);
-
-      if (file_write_cb)
-        stream_ptr->close();
-
-      // Plot the resulting trajectory
-      plotter.plotTrajectory(env->getJointNames(), planning_response.trajectory.leftCols(env->getJointNames().size()));
-      std::cout << planning_response.trajectory << '\n';
-
       ///////////////
       /// EXECUTE ///
       ///////////////
@@ -502,38 +288,39 @@ class gen3_traj_replay
       trajectory_msgs::JointTrajectory traj_msg;
       execution_client.waitForServer(ros::Duration(1.0));
 
+      // Get data
+      std::vector<std::string> joint_names = {"joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6", "joint_7"};
+      tesseract::TrajArray traj_array;
 
-      // using jt directly
-<<<<<<< HEAD
-       ros::Duration t(0.25);
-       trajArrayToJointTrajectory_moveit(planning_response.joint_names, planning_response.trajectory, robot_model,true, true, t);
+      int rows = traj_msg_queue.points.size();
+      int cols = joint_names.size();
+      traj_array.resize(rows, cols);
 
-      // Send to hardware
-       execution_client.sendGoal(trajectory_action);
-       execution_client.waitForResult(ros::Duration(10.0));
+      // Set the starting point of the robot at the current position
+      for (int j=0; j<cols; j++){
+        traj_array(0,j) = joint_states[joint_names[j]];
+      }
 
+      // Assign the joint trajectories
+      for (int i=1; i<rows; i++) 
+      {
+        for (int j=0; j<cols; j++){
+          traj_array(i,j) = traj_msg_queue.points[i].positions[j];
+        }
+      }
+      
+      // std::cout << traj_array.row(1) << std::endl;
 
-       if (execution_client.getState() != actionlib::SimpleClientGoalState::LOST)
-       {
-         std::cout << "succeeded! \n";
-         res.result = true;
-       }
-       else
-       {
-         std::cout << "failed \n";
-         res.result = false;
-       }
+      bool result;
 
-       return res.result;
-=======
-      ros::Duration t(0.25);
-      trajArrayToJointTrajectory_moveit(planning_response.joint_names, planning_response.trajectory, robot_model,true, true, t);
+      ros::Duration t(0.03); // need to modify
+      trajArrayToJointTrajectory_moveit(joint_names, traj_array, robot_model,false, true, t);
 
       // Send to hardware
       execution_client.sendGoal(trajectory_action);
       execution_client.waitForResult(ros::Duration(10.0));
 
-      bool result;
+      
       if (execution_client.getState() != actionlib::SimpleClientGoalState::LOST)
         {
           std::cout << "succeeded! \n";
@@ -546,7 +333,6 @@ class gen3_traj_replay
         }
 
         return result;
->>>>>>> ba874f1e635f6f47153fc0b0abdfc08e0cda365c
     }
 
     
@@ -560,7 +346,9 @@ class gen3_traj_replay
     moveit::core::RobotModelPtr robot_model;
     std::string manip = "Manipulator";
     std::string end_effector = "end_effector_link";
-    ros::ServiceServer srv;
+    // ros::Subscriber sub;
+    trajectory_msgs::JointTrajectory traj_msg_queue;
+    
 
 };
 
@@ -573,10 +361,14 @@ int main(int argc, char **argv) {
     util::gLogLevel = util::LevelInfo;
 
     gen3_traj_replay gen3_traj_replay(n);
+    gen3_traj_replay.getTrajectoryOnce();
+    bool result = gen3_traj_replay.gen3_play();
 
 
 
-    ROS_INFO("Ready to Gen3.");
+
+
+    ROS_INFO("Ready to replay joint trajectory for Gen3.");
     ros::spin();
 
     return 0;
